@@ -14,8 +14,74 @@ path operator""_p(const char* data, std::size_t sz) {
     return path(data, data + sz);
 }
 
-// напишите эту функцию
-bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories);
+//напишите эту функцию
+
+bool Preprocess(const path& in_file, const path& out_file, const vector<path>& include_directories){
+    if(!filesystem::exists(in_file)){
+        return false;
+    }
+    ifstream read_flow(in_file);
+    if(!read_flow){
+        return false;
+    }
+    ofstream write_flow(out_file,ios::out | ios::app);
+    static regex inc_file(R"/(\s*#\s*include\s*"([^"]*)"\s*)/");
+    static regex inc_lib(R"/(\s*#\s*include\s*<([^>]*)>\s*)/");
+    smatch m_file;
+    smatch m_lib;
+    string line;
+    int lcount = 0;
+    while(getline(read_flow, line)){
+        ++lcount;
+        ifstream read_file_flow;
+        if(regex_match(line,m_file,inc_file)){
+            path name_file = string(m_file[1]);
+            path parent_path = in_file.parent_path();
+            path path_found = parent_path / name_file;
+            read_file_flow.open(path_found);
+            if (read_file_flow.is_open()) {
+                Preprocess(path_found, out_file, include_directories);
+                read_file_flow.close();
+            } else {
+                bool found = false;
+                for (auto& file: include_directories) {
+                    if (!exists(path(file / name_file))) {
+                        continue;
+                    }
+                    found = true;
+                    Preprocess(file / name_file, out_file, include_directories);
+                    break;
+                }
+                if (!found) {
+                    cout << "unknown include file "s << name_file.string() << " at file "s << in_file.string() << " at line "s << lcount << endl;
+                }
+                if(!found) return false;
+            }
+        } else if(regex_match(line,m_lib,inc_lib)){
+            path name_file = string(m_lib[1]);
+            bool found = false;
+            for (auto& file: include_directories) {
+                if (!exists(path(file / name_file))) {
+                    continue;
+                }
+                found = true;
+                Preprocess(file / name_file, out_file, include_directories);
+                break;
+            }
+            if (!found) {
+                cout << "unknown include file "s << name_file.string() << " at file "s << in_file.string() << " at line "s << lcount << endl;
+            }
+            if(!found) return false;
+        } else {
+            write_flow << line << endl;
+        }
+    }
+    return true;
+}
+
+
+
+
 
 string GetFileContents(string file) {
     ifstream stream(file);
